@@ -1,0 +1,37 @@
+{
+  "name": "gilfoyle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack agent that provisions scoped AWS environments for hack projects",
+  "scripts": {
+    "dev": "tsx watch src/slack/index.ts",
+    "start": "node --import tsx src/slack/index.ts",
+    "typecheck": "tsc --noEmit",
+    "cdk": "cdk",
+    "cdk:synth": "cdk synth --app \"tsx src/cdk/bin/gilfoyle-cdk.ts\"",
+    "cdk:deploy:platform": "cdk deploy GilfoylePlatformStack --app \"tsx src/cdk/bin/gilfoyle-cdk.ts\" --require-approval never"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.0",
+    "@aws-sdk/client-dynamodb": "^3.708.0",
+    "@aws-sdk/client-ecs": "^3.708.0",
+    "@aws-sdk/lib-dynamodb": "^3.708.0",
+    "@libsql/client": "^0.17.0",
+    "@mastra/core": "^1.52.0",
+    "@mastra/libsql": "^1.17.0",
+    "@mastra/memory": "^1.23.0",
+    "@slack/bolt": "^5.0.0",
+    "aws-cdk-lib": "^2.262.0",
+    "constructs": "^10.7.0",
+    "dotenv": "^16.4.5",
+    "execa": "^10.0.0",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "aws-cdk": "^2.1132.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+cdk.out/
+cdk.context.json
+*.log
+.env
+.gilfoyle-memory.db
+.gilfoyle-memory.db-*
+.DS_Store

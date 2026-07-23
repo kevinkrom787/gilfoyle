@@ -1,0 +1,61 @@
+name: Deploy to gilfoyle environment
+
+# Template — copy this into the project repo gilfoyle provisioned an
+# environment for. Fill in the env vars below from the output of
+# `provisionEnvironment` (ask gilfoyle for `getEnvironmentStatus` if you
+# need to look them up again), and set up the OIDC IAM role once per project
+# (see README.md in the gilfoyle repo for the trust policy).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-east-1
+  # From provisionEnvironment's output: EcrRepositoryName / EcrRepositoryUri
+  ECR_REPOSITORY: CHANGE_ME
+  # From provisionEnvironment's output: EcsClusterName
+  ECS_CLUSTER: CHANGE_ME
+  # From provisionEnvironment's output: EcsServiceName
+  ECS_SERVICE: CHANGE_ME
+  # IAM role ARN configured for GitHub OIDC (see README) — no long-lived AWS keys
+  AWS_ROLE_ARN: CHANGE_ME
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+                        -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Force new ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment
