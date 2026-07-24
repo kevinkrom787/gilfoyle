@@ -65,8 +65,15 @@ jobs:
           # httpd image); it only changes when you register a new revision
           # with the new image and point the service at it, which is what
           # this step does.
+          # The task definition family CDK generates is NOT the same string
+          # as the service name (it's derived from the construct's logical
+          # ID path) — look up what the service is actually running rather
+          # than guessing the family name from $ECS_SERVICE.
+          CURRENT_TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
           CURRENT_TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition "$ECS_SERVICE" \
+            --task-definition "$CURRENT_TASK_DEF_ARN" \
             --query 'taskDefinition')
           NEW_TASK_DEF=$(echo "$CURRENT_TASK_DEF" | jq \
             --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
