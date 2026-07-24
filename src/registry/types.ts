@@ -8,7 +8,8 @@
 
 export type EnvironmentStatus = "provisioning" | "healthy" | "failed" | "destroyed";
 
-export type StackType = "node-api-postgres";
+/** "node-api" is the same stack minus the database — see the sibling construct. */
+export type StackType = "node-api-postgres" | "node-api";
 
 export interface EnvironmentRecord {
   environmentId: string;
@@ -22,6 +23,8 @@ export interface EnvironmentRecord {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** AWS region this environment was deployed into. */
+  region?: string;
   slackChannelId?: string;
   slackThreadTs?: string;
   /** Populated when status is "failed". */
@@ -45,4 +48,5 @@ export interface CreateEnvironmentInput {
   slackThreadTs?: string;
   /** Hours until auto-teardown. Defaults to DEFAULT_TTL_HOURS in registry/client.ts. */
   ttlHours?: number;
+  region?: string;
 }

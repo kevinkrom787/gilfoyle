@@ -1,5 +1,6 @@
 import type { StackType } from "../registry/types.js";
 import type { EnvironmentTier } from "./lib/constructs/node-api-postgres-environment.js";
+import type { AutoscalingConfig } from "./lib/constructs/shared.js";
 
 /**
  * Shared by the local provisioner (src/cdk/provisioner.ts) and the reaper
@@ -12,6 +13,8 @@ export interface StackIdentity {
   environmentId: string;
   stackType: StackType;
   tier?: EnvironmentTier;
+  region?: string;
+  autoscaling?: AutoscalingConfig;
 }
 
 export function stackNameFor({

@@ -52,6 +52,7 @@ export async function createEnvironment(
     slackChannelId: input.slackChannelId,
     slackThreadTs: input.slackThreadTs,
     expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString(),
+    region: input.region,
   };
 
   await docClient.send(

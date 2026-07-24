@@ -169,7 +169,12 @@ test workspace:
 and an ECS cluster/service name. The container it deploys initially is a placeholder.
 Copy `.github/workflows/deploy.yml` into the project's own repo, fill in `ECR_REPOSITORY`,
 `ECS_CLUSTER`, `ECS_SERVICE`, and `AWS_ROLE_ARN`, and set up an OIDC-trusted IAM role for
-GitHub Actions in that AWS account (no long-lived AWS keys):
+GitHub Actions in that AWS account (no long-lived AWS keys). You'll need both a one-time
+OIDC identity provider for the account (`aws iam create-open-id-connect-provider --url
+https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com
+--thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+1c58a3a8518e8759bf075b76b750d4f2df264fcd` — skip if one already exists in the account) and a
+role scoped to the specific repo:
 
 ```jsonc
 // Trust policy for the GitHub OIDC role, scoped to your org/repo
@@ -180,16 +185,41 @@ GitHub Actions in that AWS account (no long-lived AWS keys):
     "Principal": { "Federated": "arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com" },
     "Action": "sts:AssumeRoleWithWebIdentity",
     "Condition": {
-      "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-      "StringLike": { "token.actions.githubusercontent.com:sub": "repo:<org>/<repo>:ref:refs/heads/main" }
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:<org>@<org-numeric-id>/<repo>@<repo-numeric-id>:ref:refs/heads/main"
+      }
     }
   }]
 }
 ```
 
-Grant that role `ecr:GetAuthorizationToken`/push permissions on the repo and
-`ecs:UpdateService`/`DescribeServices` on the cluster/service. On push to `main`, the
-workflow builds and pushes an image and force-deploys the ECS service.
+> ⚠️ **The `sub` claim includes immutable numeric IDs, not just the org/repo names** —
+> `repo:kevinkrom787@8699199/gilfoyle-demo-app@1311202296:ref:refs/heads/main`, not the
+> shorter `repo:kevinkrom787/gilfoyle-demo-app:ref:...` you might expect from older docs.
+> Get the exact string from CloudTrail after a failed attempt (`aws cloudtrail
+> lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity`
+> — the `userIdentity.userName` field has it) rather than guessing, or the assume-role call
+> fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity` despite a
+> superficially-correct-looking trust policy.
+
+Grant that role:
+- `ecr:GetAuthorizationToken` (resource `*` — this action doesn't support scoping) plus
+  `ecr:BatchCheckLayerAvailability` / `GetDownloadUrlForLayer` / `BatchGetImage` / `PutImage`
+  / `InitiateLayerUpload` / `UploadLayerPart` / `CompleteLayerUpload` scoped to the repo ARN
+- `ecs:DescribeTaskDefinition` and `ecs:RegisterTaskDefinition` (resource `*` — task
+  definition registration doesn't support resource-level scoping either), plus
+  `iam:PassRole` on the task's execution role and task role ARNs (registering a task
+  definition that references them requires being allowed to pass them)
+- `ecs:UpdateService` / `DescribeServices` scoped to the cluster/service ARNs
+
+The deploy step registers a **new task definition revision** pointing at the freshly-pushed
+image before updating the service — `--force-new-deployment` alone only restarts the
+service on whatever task definition it already has (initially the placeholder image); it
+has no way to know a new image landed in ECR unless something points a task definition at
+it. The ECS task's own execution role can always pull from the project's ECR repo (the
+construct grants this automatically via `repository.grantPull(...)`), so once the new
+revision exists, deployment just works.
 
 ## Project layout
 

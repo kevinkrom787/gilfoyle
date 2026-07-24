@@ -22,6 +22,21 @@ const environmentId = app.node.tryGetContext("environmentId");
 const stackType = app.node.tryGetContext("stackType");
 const tier = app.node.tryGetContext("tier") as EnvironmentTier | undefined;
 
+// Genuinely respected, not decorative: a region context override really
+// does change where this stack deploys. The tool layer only offers regions
+// that are actually bootstrapped (see provision-environment.ts) — asking
+// for anything else would fail with a clear "not bootstrapped" error rather
+// than silently deploying somewhere the user didn't ask for.
+const region =
+  app.node.tryGetContext("region") ?? process.env.CDK_DEFAULT_REGION ?? process.env.AWS_REGION;
+
+const minCapacity = app.node.tryGetContext("minCapacity");
+const maxCapacity = app.node.tryGetContext("maxCapacity");
+const autoscaling =
+  minCapacity && maxCapacity
+    ? { minCapacity: Number(minCapacity), maxCapacity: Number(maxCapacity) }
+    : undefined;
+
 if (projectName && environmentId && stackType) {
   const stackName = `gilfoyle-${projectName}-${environmentId}`;
   new EnvironmentStack(app, stackName, {
@@ -30,9 +45,10 @@ if (projectName && environmentId && stackType) {
     environmentId,
     stackType,
     tier,
+    autoscaling,
     env: {
       account: process.env.CDK_DEFAULT_ACCOUNT,
-      region: process.env.CDK_DEFAULT_REGION ?? process.env.AWS_REGION,
+      region,
     },
   });
 }

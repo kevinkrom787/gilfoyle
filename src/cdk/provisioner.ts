@@ -35,6 +35,17 @@ function contextArgs(identity: StackIdentity): string[] {
   if (identity.tier) {
     args.push("-c", `tier=${identity.tier}`);
   }
+  if (identity.region) {
+    args.push("-c", `region=${identity.region}`);
+  }
+  if (identity.autoscaling) {
+    args.push(
+      "-c",
+      `minCapacity=${identity.autoscaling.minCapacity}`,
+      "-c",
+      `maxCapacity=${identity.autoscaling.maxCapacity}`,
+    );
+  }
   return args;
 }
 
