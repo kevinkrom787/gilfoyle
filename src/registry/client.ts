@@ -26,6 +26,9 @@ import type {
 
 const TABLE_NAME = process.env.GILFOYLE_REGISTRY_TABLE ?? "gilfoyle-environments";
 
+/** Default auto-teardown window for provisioned environments, in hours. */
+export const DEFAULT_TTL_HOURS = 4;
+
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
@@ -35,6 +38,7 @@ export async function createEnvironment(
   input: CreateEnvironmentInput,
 ): Promise<EnvironmentRecord> {
   const now = new Date().toISOString();
+  const ttlHours = input.ttlHours ?? DEFAULT_TTL_HOURS;
   const record: EnvironmentRecord = {
     environmentId: randomUUID(),
     projectName: input.projectName,
@@ -47,6 +51,7 @@ export async function createEnvironment(
     updatedAt: now,
     slackChannelId: input.slackChannelId,
     slackThreadTs: input.slackThreadTs,
+    expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString(),
   };
 
   await docClient.send(
@@ -91,10 +96,35 @@ export async function listEnvironments(
   return (result.Items ?? []) as EnvironmentRecord[];
 }
 
+/**
+ * Environments the reaper Lambda should tear down: still "healthy" and past
+ * their `expiresAt`. Records with no `expiresAt` (created before this field
+ * existed) never match — they're skipped, not reaped.
+ */
+export async function listExpiredHealthyEnvironments(): Promise<EnvironmentRecord[]> {
+  const result = await docClient.send(
+    new ScanCommand({
+      TableName: TABLE_NAME,
+      FilterExpression: "#status = :healthy AND expiresAt <= :now",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":healthy": "healthy",
+        ":now": new Date().toISOString(),
+      },
+    }),
+  );
+  return (result.Items ?? []) as EnvironmentRecord[];
+}
+
 export async function updateEnvironmentStatus(
   environmentId: string,
   status: EnvironmentStatus,
-  opts: { resources?: string[]; outputs?: Record<string, string>; errorMessage?: string } = {},
+  opts: {
+    resources?: string[];
+    outputs?: Record<string, string>;
+    errorMessage?: string;
+    destroyedBy?: "user" | "ttl";
+  } = {},
 ): Promise<void> {
   const sets = ["#status = :status", "updatedAt = :updatedAt"];
   const names: Record<string, string> = { "#status": "status" };
@@ -114,6 +144,10 @@ export async function updateEnvironmentStatus(
   if (opts.errorMessage) {
     sets.push("errorMessage = :errorMessage");
     values[":errorMessage"] = opts.errorMessage;
+  }
+  if (opts.destroyedBy) {
+    sets.push("destroyedBy = :destroyedBy");
+    values[":destroyedBy"] = opts.destroyedBy;
   }
 
   await docClient.send(

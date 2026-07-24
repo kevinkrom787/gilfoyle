@@ -55,6 +55,26 @@ touch them.
 Everything else (which stack template exists, sync vs. async provisioning, how smart the
 agent is about picking parameters) is intentionally narrow in v1 and fine to change.
 
+## Auto-teardown (TTL reaper)
+
+Every environment gets an `expiresAt` at creation time (`ttlHours` on `provisionEnvironment`,
+default 4h, max 24h — this is a demo tool, not meant for anything long-lived). A scheduled
+Lambda (`src/reaper/handler.ts`, deployed as part of `GilfoylePlatformStack`) runs every 15
+minutes via EventBridge, finds `healthy` environments past their `expiresAt`, and deletes
+their CloudFormation stack directly — independent of whether your laptop is on, `npm run dev`
+is running, or the Slack bot has crashed. That independence is the entire point: a TTL
+enforced only while a local process happens to be running isn't a safety net.
+
+The reaper calls `cloudformation:DeleteStack` directly (not `cdk destroy` — a Lambda has no
+CDK CLI or project checkout) using `RoleARN` to have CloudFormation assume the CDK bootstrap's
+own execution role for the actual resource deletion. Its own IAM role only needs
+`cloudformation:DeleteStack`/`DescribeStacks` scoped to `gilfoyle-*` stacks plus `iam:PassRole`
+on that one bootstrap role — it never gets broad EC2/RDS/ECS delete permissions itself.
+
+Records created before this feature existed have no `expiresAt` and are silently skipped by
+the reaper's filter (never matched, never reaped) — if you have any from before, either
+destroy them manually or backfill `expiresAt` directly in DynamoDB.
+
 ## Prerequisites (you set these up yourself)
 
 - An AWS account with credentials available locally (`AWS_PROFILE`, or standard env vars,
@@ -185,9 +205,12 @@ src/
   cdk/
     lib/constructs/node-api-postgres-environment.ts  # the one v1 stack type (one-way door shape)
     lib/environment-stack.ts  # dispatches stackType -> construct
-    lib/platform-stack.ts     # registry DynamoDB table
+    lib/platform-stack.ts     # registry DynamoDB table + TTL reaper Lambda/schedule
     bin/gilfoyle-cdk.ts      # CDK app entry
     provisioner.ts            # shells out to `cdk deploy` / `cdk destroy`
+    stack-name.ts              # shared stack-naming helper (provisioner + reaper)
+  reaper/
+    handler.ts                 # scheduled Lambda: deletes expired environment stacks
   slack/
     app.ts                    # Bolt app + app_mention handler
     index.ts                  # entry point
@@ -216,3 +239,5 @@ src/
   future monitoring agent fills in.
 - Only one stack type. Adding a second is additive (see "One-way doors" above), not a
   rewrite.
+- The reaper checks every 15 minutes, not instantly at the TTL boundary — an environment can
+  outlive its `expiresAt` by up to ~15 minutes before it's actually torn down.

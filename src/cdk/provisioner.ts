@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { EnvironmentTier } from "./lib/constructs/node-api-postgres-environment.js";
-import type { StackType } from "../registry/types.js";
+import { stackNameFor, type StackIdentity } from "./stack-name.js";
 
 /**
  * Thin wrapper around the `cdk` CLI. This is the ONLY module that knows how
@@ -14,23 +13,14 @@ import type { StackType } from "../registry/types.js";
  * same-file change with no impact on the tool layer above it.
  */
 
-const CDK_APP_DIR = process.env.GILFOYLE_CDK_APP_DIR ?? "./src/cdk";
+export type { StackIdentity };
 
-export interface StackIdentity {
-  projectName: string;
-  environmentId: string;
-  stackType: StackType;
-  tier?: EnvironmentTier;
-}
+const CDK_APP_DIR = process.env.GILFOYLE_CDK_APP_DIR ?? "./src/cdk";
 
 export interface DeployResult {
   stackName: string;
   outputs: Record<string, string>;
   resourceArns: string[];
-}
-
-function stackNameFor({ projectName, environmentId }: StackIdentity): string {
-  return `gilfoyle-${projectName}-${environmentId}`;
 }
 
 function contextArgs(identity: StackIdentity): string[] {

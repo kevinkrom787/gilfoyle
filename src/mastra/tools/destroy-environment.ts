@@ -34,7 +34,7 @@ export const destroyEnvironment = createTool({
         stackType: record.stackType,
       });
 
-      await registry.updateEnvironmentStatus(environmentId, "destroyed");
+      await registry.updateEnvironmentStatus(environmentId, "destroyed", { destroyedBy: "user" });
 
       return { environmentId, status: "destroyed" as const };
     } catch (error) {

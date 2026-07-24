@@ -25,6 +25,16 @@ export const provisionEnvironment = createTool({
       .enum(["small", "medium", "large"])
       .default("small")
       .describe("Controls Fargate task size and RDS instance class."),
+    ttlHours: z
+      .number()
+      .min(0.25)
+      .max(24)
+      .default(registry.DEFAULT_TTL_HOURS)
+      .describe(
+        "Hours until this environment is automatically torn down by the TTL reaper, " +
+          "even if nobody destroys it manually. Default is 4 hours; max 24 — this tool " +
+          "is for hack-project demos, not anything meant to run long-term.",
+      ),
   }),
   outputSchema: z.object({
     environmentId: z.string(),
@@ -34,9 +44,10 @@ export const provisionEnvironment = createTool({
     ecrRepositoryName: z.string().optional(),
     ecsClusterName: z.string().optional(),
     ecsServiceName: z.string().optional(),
+    expiresAt: z.string().optional(),
     errorMessage: z.string().optional(),
   }),
-  execute: async ({ projectName, stackType, tier }, { requestContext }) => {
+  execute: async ({ projectName, stackType, tier, ttlHours }, { requestContext }) => {
     const createdBy = requestContext.get("slackUserId") as string | undefined;
     const slackChannelId = requestContext.get("slackChannelId") as string | undefined;
     const slackThreadTs = requestContext.get("slackThreadTs") as string | undefined;
@@ -47,6 +58,7 @@ export const provisionEnvironment = createTool({
       createdBy: createdBy ?? "unknown",
       slackChannelId,
       slackThreadTs,
+      ttlHours,
     });
 
     try {
@@ -70,6 +82,7 @@ export const provisionEnvironment = createTool({
         ecrRepositoryName: result.outputs.EcrRepositoryName,
         ecsClusterName: result.outputs.EcsClusterName,
         ecsServiceName: result.outputs.EcsServiceName,
+        expiresAt: record.expiresAt,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

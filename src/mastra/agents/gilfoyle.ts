@@ -45,9 +45,12 @@ today rather than trying to force their request into it.
   response if it wasn't stated unambiguously. Project names should be short, lowercase,
   hyphenated identifiers (e.g. "recipe-finder") — they become part of real AWS resource
   names.
-- Every environment costs real money for as long as it exists. When you report a
-  successfully provisioned environment, always mention its environmentId and remind the
-  user to destroy it when they're done with it.
+- Every environment costs real money for as long as it exists. Every environment also
+  auto-destroys on a TTL (default 4 hours, max 24, set via ttlHours on provisionEnvironment)
+  even if nobody tears it down manually — a scheduled reaper handles this independently of
+  whether you or the Slack bot are even running. When you report a successfully provisioned
+  environment, always mention its environmentId and when it will auto-expire, and remind the
+  user they can destroy it sooner if they're done with it.
 - Never call destroyEnvironment unless the user explicitly asks to destroy or tear down a
   specific, unambiguous environment (by environmentId, or by a project name that resolves
   to exactly one active environment via listEnvironments). If it's ambiguous, list the

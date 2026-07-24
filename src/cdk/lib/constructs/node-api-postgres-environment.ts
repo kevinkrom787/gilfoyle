@@ -150,21 +150,24 @@ export class NodeApiPostgresEnvironment extends Construct {
     const container = taskDefinition.addContainer("api", {
       // Placeholder image until the project's own GitHub Actions workflow
       // (.github/workflows/deploy.yml) pushes a real one and force-deploys.
-      // httpd's default config listens on port 80 — add a Listen directive so
-      // it actually answers on the port the ALB target group/health check
-      // use (8080), matching the PORT contract a real app should follow.
+      // Deliberately using httpd's zero-config default (port 80, no command
+      // override) rather than trying to rewire it to a different port —
+      // that requires knowing the image's exact entrypoint/CMD shape, which
+      // is one more thing to get wrong for a container nobody keeps. A real
+      // app deployed here should listen on 80 too (this is the port baked
+      // into the ALB target group below); switch both together if you want
+      // a non-privileged container port instead.
       image: ecs.ContainerImage.fromRegistry("public.ecr.aws/docker/library/httpd:latest"),
-      command: ["-c", "Listen 8080"],
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "api", logGroup }),
       environment: {
-        PORT: "8080",
+        PORT: "80",
         PROJECT_NAME: projectName,
         ENVIRONMENT_ID: environmentId,
       },
       secrets: {
         DB_CREDENTIALS: ecs.Secret.fromSecretsManager(database.secret!),
       },
-      portMappings: [{ containerPort: 8080 }],
+      portMappings: [{ containerPort: 80 }],
     });
     void container;
 
@@ -193,7 +196,7 @@ export class NodeApiPostgresEnvironment extends Construct {
     });
     const listener = alb.addListener("Listener", { port: 80, open: true });
     listener.addTargets("ApiTargets", {
-      port: 8080,
+      port: 80,
       targets: [service],
       healthCheck: { path: "/", healthyHttpCodes: "200-499" },
     });
